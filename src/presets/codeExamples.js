@@ -17,8 +17,33 @@ Promise.resolve().then(() => {
 console.log('4. Script end');`
   },
   {
+    id: 'nexttick-setimmediate',
+    title: '2. Node.js Event Loop (process.nextTick & setImmediate)',
+    difficulty: 'Advanced',
+    description: 'Demonstrates how process.nextTick runs before Promise microtasks, and setImmediate runs in the Macrotask Check phase.',
+    code: `console.log('1. Start script');
+
+setTimeout(() => {
+  console.log('2. setTimeout 0ms');
+}, 0);
+
+setImmediate(() => {
+  console.log('3. setImmediate callback');
+});
+
+Promise.resolve().then(() => {
+  console.log('4. Promise.then callback');
+});
+
+process.nextTick(() => {
+  console.log('5. process.nextTick (Top Microtask Priority)');
+});
+
+console.log('6. End script');`
+  },
+  {
     id: 'async-await-order',
-    title: '2. Async / Await Execution Flow',
+    title: '3. Async / Await Execution Flow',
     difficulty: 'Intermediate',
     description: 'Shows how code inside an async function runs synchronously until the first `await`, after which the remainder is queued as a microtask.',
     code: `async function async1() {
@@ -50,7 +75,7 @@ console.log('8. Script end');`
   },
   {
     id: 'nested-microtasks',
-    title: '3. Chained & Nested Microtasks',
+    title: '4. Chained & Nested Microtasks',
     difficulty: 'Intermediate',
     description: 'Demonstrates how microtasks created inside other microtasks are processed in the SAME loop iteration before macrotasks.',
     code: `console.log('1. Start');
@@ -77,7 +102,7 @@ console.log('7. End');`
   },
   {
     id: 'multiple-timers',
-    title: '4. Web API Timers & Delays',
+    title: '5. Web API Timers & Delays',
     difficulty: 'Beginner',
     description: 'Observe how Web APIs handle countdown timers and move callbacks into the Macrotask Queue based on delay.',
     code: `console.log('1. Script Start');
@@ -98,13 +123,13 @@ console.log('5. Script End');`
   },
   {
     id: 'starvation',
-    title: '5. Microtask Queue Starvation',
+    title: '6. Microtask Queue Starvation',
     difficulty: 'Advanced',
     description: 'Shows how an infinite chain of microtasks starves the macrotask queue (setTimeout never gets to run!).',
     code: `console.log('1. Start execution');
 
 setTimeout(() => {
-  console.log('2. Macrotask callback (Should run eventualy)');
+  console.log('2. Macrotask callback (Should run eventually)');
 }, 0);
 
 function scheduleMicrotask(count) {
@@ -121,7 +146,7 @@ console.log('4. End synchronous script');`
   },
   {
     id: 'variables-scope',
-    title: '6. Variables & Scope with Async Code',
+    title: '7. Variables & Scope with Async Code',
     difficulty: 'Beginner',
     description: 'Track variable values, closures, and state mutations across event loop phases.',
     code: `let count = 0;
@@ -140,21 +165,5 @@ Promise.resolve().then(() => {
 });
 
 console.log('Final sync count:', count);`
-  },
-  {
-    id: 'loops-and-async',
-    title: '7. Loops & Async Callbacks',
-    difficulty: 'Intermediate',
-    description: 'Demonstrates synchronous loop execution vs queued async callbacks.',
-    code: `console.log('1. Start loop');
-
-for (let i = 1; i <= 3; i++) {
-  setTimeout(() => {
-    console.log('Timer callback i =', i);
-  }, 0);
-  console.log('Sync loop iteration i =', i);
-}
-
-console.log('2. Loop finished');`
   }
 ];

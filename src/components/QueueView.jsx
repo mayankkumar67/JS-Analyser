@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Clock, ArrowRight, CornerDownRight } from 'lucide-react';
+import { Zap, Clock } from 'lucide-react';
 
 export function QueueView({
   microtaskQueue,
@@ -17,7 +17,7 @@ export function QueueView({
         <div className="panel-header">
           <div className="panel-title text-purple-400">
             <Zap size={18} />
-            <span>Microtask Queue (Job Queue)</span>
+            <span>Microtask Queue (process.nextTick & Promises)</span>
           </div>
           <div className="queue-tags">
             <span className="priority-pill-high">P1 High Priority</span>
@@ -34,28 +34,31 @@ export function QueueView({
             </div>
           ) : (
             <div className="queue-items-list">
-              {microtaskQueue.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  className={`queue-item-card micro-item ${idx === 0 ? 'head-item' : ''}`}
-                >
-                  <div className="queue-item-header">
-                    <span className="item-badge micro-badge">
-                      {idx === 0 ? '▶ NEXT MICRO' : `#${idx + 1}`}
-                    </span>
-                    <strong className="item-label text-purple-200">{item.label}</strong>
-                  </div>
-                  {item.code && (
-                    <div className="queue-item-code text-purple-300/80">
-                      {item.code}
+              {microtaskQueue.map((item, idx) => {
+                const isNextTick = item.type === 'process.nextTick';
+                return (
+                  <div
+                    key={item.id || idx}
+                    className={`queue-item-card micro-item ${idx === 0 ? 'head-item' : ''}`}
+                  >
+                    <div className="queue-item-header">
+                      <span className={`item-badge ${isNextTick ? 'bg-pink-500/40 text-pink-200 border border-pink-500/50' : 'micro-badge'}`}>
+                        {isNextTick ? '⚡ NEXT TICK (TOP)' : idx === 0 ? '▶ NEXT MICRO' : `#${idx + 1}`}
+                      </span>
+                      <strong className="item-label text-purple-200">{item.label}</strong>
                     </div>
-                  )}
-                  <div className="queue-item-meta">
-                    <span>Origin: Line {item.sourceLine || 1}</span>
-                    <span className="type-tag">{item.type}</span>
+                    {item.code && (
+                      <div className="queue-item-code text-purple-300/80">
+                        {item.code}
+                      </div>
+                    )}
+                    <div className="queue-item-meta">
+                      <span>Origin: Line {item.sourceLine || 1}</span>
+                      <span className="type-tag">{item.type}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -66,7 +69,7 @@ export function QueueView({
         <div className="panel-header">
           <div className="panel-title text-amber-400">
             <Clock size={18} />
-            <span>Macrotask Queue (Task Queue)</span>
+            <span>Macrotask Queue (setTimeout & setImmediate)</span>
           </div>
           <div className="queue-tags">
             <span className="priority-pill-normal">P2 Callback Queue</span>
@@ -83,28 +86,31 @@ export function QueueView({
             </div>
           ) : (
             <div className="queue-items-list">
-              {macrotaskQueue.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  className={`queue-item-card macro-item ${idx === 0 ? 'head-item' : ''}`}
-                >
-                  <div className="queue-item-header">
-                    <span className="item-badge macro-badge">
-                      {idx === 0 ? '▶ NEXT MACRO' : `#${idx + 1}`}
-                    </span>
-                    <strong className="item-label text-amber-200">{item.label}</strong>
-                  </div>
-                  {item.code && (
-                    <div className="queue-item-code text-amber-300/80">
-                      {item.code}
+              {macrotaskQueue.map((item, idx) => {
+                const isImmediate = item.type === 'setImmediate';
+                return (
+                  <div
+                    key={item.id || idx}
+                    className={`queue-item-card macro-item ${idx === 0 ? 'head-item' : ''}`}
+                  >
+                    <div className="queue-item-header">
+                      <span className={`item-badge ${isImmediate ? 'bg-orange-500/40 text-orange-200 border border-orange-500/50' : 'macro-badge'}`}>
+                        {isImmediate ? '⏰ SET IMMEDIATE' : idx === 0 ? '▶ NEXT MACRO' : `#${idx + 1}`}
+                      </span>
+                      <strong className="item-label text-amber-200">{item.label}</strong>
                     </div>
-                  )}
-                  <div className="queue-item-meta">
-                    <span>Origin: Line {item.sourceLine || 1}</span>
-                    <span className="type-tag">{item.type}</span>
+                    {item.code && (
+                      <div className="queue-item-code text-amber-300/80">
+                        {item.code}
+                      </div>
+                    )}
+                    <div className="queue-item-meta">
+                      <span>Origin: Line {item.sourceLine || 1}</span>
+                      <span className="type-tag">{item.type}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

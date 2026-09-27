@@ -25,7 +25,7 @@ export default function App() {
   const [parseError, setParseError] = useState(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState(750);
+  const [speed, setSpeed] = useState(1000);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const timerRef = useRef(null);

@@ -91,6 +91,20 @@ function runSimulation(ast, originalCode) {
     });
   }
 
+  // Helper to push microtasks respecting process.nextTick top priority
+  function pushMicrotask(item) {
+    if (item.type === 'process.nextTick') {
+      // Find insertion index after existing nextTicks
+      let insertIdx = 0;
+      while (insertIdx < microtaskQueue.length && microtaskQueue[insertIdx].type === 'process.nextTick') {
+        insertIdx++;
+      }
+      microtaskQueue.splice(insertIdx, 0, item);
+    } else {
+      microtaskQueue.push(item);
+    }
+  }
+
   // Initial Step
   callStack.push({
     id: 'frame-main',
@@ -135,7 +149,7 @@ function runSimulation(ast, originalCode) {
 
   // EVENT LOOP DRAIN PROCESS
   let eventLoopLoopGuard = 0;
-  const MAX_EVENT_LOOP_TICKS = 100;
+  const MAX_EVENT_LOOP_TICKS = 150;
 
   while (
     (microtaskQueue.length > 0 || macrotaskQueue.length > 0 || webApis.length > 0) &&
@@ -145,7 +159,6 @@ function runSimulation(ast, originalCode) {
 
     // 1. Process timers ready in Web APIs -> Macrotask Queue
     if (webApis.length > 0) {
-      // Find timers ready to trigger
       const readyTimers = [...webApis];
       webApis = [];
 
@@ -172,13 +185,13 @@ function runSimulation(ast, originalCode) {
       });
     }
 
-    // 2. Process ALL Microtasks in Microtask Queue
+    // 2. Process ALL Microtasks in Microtask Queue (including process.nextTick and Promise microtasks)
     if (microtaskQueue.length > 0) {
       addStep({
         type: 'eventloop_check',
         line: microtaskQueue[0].sourceLine || 1,
-        description: `Event Loop checking Microtask Queue (${microtaskQueue.length} microtasks pending).`,
-        detailedExplanation: 'Before inspecting macrotasks or rendering, the Event Loop drains the ENTIRE Microtask Queue (Promise callbacks, queueMicrotask).',
+        description: `Event Loop checking Microtask Queue (${microtaskQueue.length} microtask(s) pending).`,
+        detailedExplanation: 'Before inspecting macrotasks or rendering, the Event Loop drains the ENTIRE Microtask Queue (process.nextTick, Promise callbacks, queueMicrotask).',
         phase: 'DRAINING_MICROTASKS',
         activePointer: 'microtask',
         activePhaseDescription: 'Draining Microtask Queue'
@@ -199,8 +212,8 @@ function runSimulation(ast, originalCode) {
         addStep({
           type: 'microtask',
           line: microtask.sourceLine || 1,
-          description: `Event Loop popped microtask \`${microtask.label}\` from Microtask Queue to Call Stack.`,
-          detailedExplanation: `Microtask popped from Microtask Queue into the Call Stack for execution.`,
+          description: `Event Loop popped microtask \`${microtask.label}\` to Call Stack.`,
+          detailedExplanation: `Microtask (\`${microtask.type}\`) popped from Microtask Queue into the Call Stack for execution.`,
           phase: 'CALL_STACK',
           activePointer: 'stack',
           activePhaseDescription: `Executing Microtask: ${microtask.label}`
@@ -227,7 +240,7 @@ function runSimulation(ast, originalCode) {
       }
     }
 
-    // 3. Process ONE Macrotask from Macrotask Queue
+    // 3. Process ONE Macrotask from Macrotask Queue (setTimeout, setImmediate)
     if (macrotaskQueue.length > 0 && microtaskQueue.length === 0) {
       addStep({
         type: 'eventloop_check',
@@ -244,9 +257,9 @@ function runSimulation(ast, originalCode) {
       callStack.push({
         id: `frame-${macrotask.id}`,
         name: macrotask.label,
-        type: 'macrotask',
+        type: macrotask.type || 'macrotask',
         line: macrotask.sourceLine || 1,
-        code: macrotask.code || 'setTimeout callback'
+        code: macrotask.code || 'macrotask callback'
       });
 
       addStep({
@@ -282,7 +295,7 @@ function runSimulation(ast, originalCode) {
     type: 'finished',
     line: getLastLine(originalCode),
     description: 'Execution complete! Call stack, Microtasks, and Macrotasks are all empty.',
-    detailedExplanation: 'The Event Loop has completed processing all synchronous code, promises, microtasks, and timer callbacks. Engine is idle.',
+    detailedExplanation: 'The Event Loop has completed processing all synchronous code, promises, process.nextTick, setImmediate, and timer callbacks. Engine is idle.',
     phase: 'FINISHED',
     activePointer: 'none',
     activePhaseDescription: 'Event Loop Idle'
@@ -340,7 +353,6 @@ function runSimulation(ast, originalCode) {
       }
 
       case 'FunctionDeclaration': {
-        // Function declaration hoisted / defined
         break;
       }
 
@@ -475,7 +487,6 @@ function runSimulation(ast, originalCode) {
 
       case 'NewExpression': {
         if (expr.callee.name === 'Promise') {
-          // new Promise((resolve) => { ... })
           const executorNode = expr.arguments[0];
           let promiseResolved = false;
 
@@ -510,7 +521,7 @@ function runSimulation(ast, originalCode) {
           return {
             isPromise: true,
             then: (thenCbNode) => {
-              microtaskQueue.push({
+              pushMicrotask({
                 id: `micro-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
                 label: 'Promise.then callback',
                 type: 'Promise.then',
@@ -584,7 +595,85 @@ function runSimulation(ast, originalCode) {
       return undefined;
     }
 
-    // 2. setTimeout(cb, delay)
+    // 2. process.nextTick(cb)
+    if (
+      callee.type === 'MemberExpression' &&
+      callee.object.name === 'process' &&
+      callee.property.name === 'nextTick'
+    ) {
+      const callbackNode = expr.arguments[0];
+      const cbSnippet = getSourceSnippet(callbackNode, originalCode) || 'process.nextTick callback';
+
+      callStack.push({
+        id: `frame-nextTick-${Date.now()}`,
+        name: 'process.nextTick(...)',
+        type: 'process.nextTick',
+        line,
+        code: 'process.nextTick(...)'
+      });
+
+      pushMicrotask({
+        id: `micro-nexttick-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        label: 'process.nextTick callback',
+        type: 'process.nextTick',
+        sourceLine: line,
+        code: cbSnippet,
+        astNode: callbackNode
+      });
+
+      addStep({
+        type: 'microtask',
+        line,
+        loc,
+        description: 'Called `process.nextTick`. Callback queued to Microtask Queue (Highest Priority).',
+        detailedExplanation: '`process.nextTick()` queues its callback at the head of the Microtask Queue. NextTick callbacks execute before Promise microtasks!',
+        phase: 'DRAINING_MICROTASKS',
+        activePointer: 'microtask',
+        activePhaseDescription: 'Queued to Microtask Queue (process.nextTick)'
+      });
+
+      callStack.pop();
+      return undefined;
+    }
+
+    // 3. setImmediate(cb)
+    if (callee.name === 'setImmediate' || (callee.type === 'MemberExpression' && callee.property.name === 'setImmediate')) {
+      const callbackNode = expr.arguments[0];
+      const cbSnippet = getSourceSnippet(callbackNode, originalCode) || 'setImmediate callback';
+
+      callStack.push({
+        id: `frame-setImmediate-${Date.now()}`,
+        name: 'setImmediate(...)',
+        type: 'setImmediate',
+        line,
+        code: 'setImmediate(...)'
+      });
+
+      macrotaskQueue.push({
+        id: `macro-immediate-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        label: 'setImmediate callback',
+        type: 'setImmediate',
+        sourceLine: line,
+        code: cbSnippet,
+        astNode: callbackNode
+      });
+
+      addStep({
+        type: 'macrotask',
+        line,
+        loc,
+        description: 'Called `setImmediate`. Callback queued to Macrotask Queue (Check Phase).',
+        detailedExplanation: '`setImmediate()` inserts its callback into the Macrotask Queue (Check Phase). It runs on the next iteration of the Event Loop after microtasks.',
+        phase: 'CHECKING_MACRO_QUEUE',
+        activePointer: 'macrotask',
+        activePhaseDescription: 'Queued to Macrotask Queue (setImmediate)'
+      });
+
+      callStack.pop();
+      return undefined;
+    }
+
+    // 4. setTimeout(cb, delay)
     if (callee.name === 'setTimeout') {
       const callbackNode = expr.arguments[0];
       const delay = expr.arguments[1] ? evaluateExpression(expr.arguments[1], line, loc) : 0;
@@ -625,7 +714,7 @@ function runSimulation(ast, originalCode) {
       return undefined;
     }
 
-    // 3. queueMicrotask(cb)
+    // 5. queueMicrotask(cb)
     if (callee.name === 'queueMicrotask') {
       const callbackNode = expr.arguments[0];
       const cbSnippet = getSourceSnippet(callbackNode, originalCode) || 'queueMicrotask callback';
@@ -638,7 +727,7 @@ function runSimulation(ast, originalCode) {
         code: 'queueMicrotask(...)'
       });
 
-      microtaskQueue.push({
+      pushMicrotask({
         id: `micro-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         label: 'queueMicrotask callback',
         type: 'queueMicrotask',
@@ -661,7 +750,7 @@ function runSimulation(ast, originalCode) {
       return undefined;
     }
 
-    // 4. Promise.resolve().then(...)
+    // 6. Promise.resolve().then(...)
     if (
       callee.type === 'MemberExpression' &&
       callee.property.name === 'then'
@@ -672,8 +761,7 @@ function runSimulation(ast, originalCode) {
       if (objResult && objResult.isPromise) {
         objResult.then(thenCbNode);
       } else {
-        // Promise.resolve().then(...) chaining directly
-        microtaskQueue.push({
+        pushMicrotask({
           id: `micro-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
           label: 'Promise.then callback',
           type: 'Promise.then',
@@ -695,7 +783,7 @@ function runSimulation(ast, originalCode) {
       return undefined;
     }
 
-    // 5. Promise.resolve() static call
+    // 7. Promise.resolve() static call
     if (
       callee.type === 'MemberExpression' &&
       callee.object.name === 'Promise' &&
@@ -704,7 +792,7 @@ function runSimulation(ast, originalCode) {
       return {
         isPromise: true,
         then: (thenCbNode) => {
-          microtaskQueue.push({
+          pushMicrotask({
             id: `micro-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
             label: 'Promise.then callback',
             type: 'Promise.then',
@@ -726,7 +814,7 @@ function runSimulation(ast, originalCode) {
       };
     }
 
-    // 6. User Function Invocation (e.g. async1(), foo())
+    // 8. User Function Invocation
     if (callee.type === 'Identifier') {
       const funcName = callee.name;
       const funcNode = functionsMap[funcName];
@@ -750,7 +838,6 @@ function runSimulation(ast, originalCode) {
           activePointer: 'stack'
         });
 
-        // Execute function body
         if (funcNode.async) {
           executeAsyncFunctionBody(funcNode.body.body, funcName, line);
         } else {
@@ -789,11 +876,9 @@ function runSimulation(ast, originalCode) {
     }
 
     if (awaitIndex !== -1) {
-      // Execute statements BEFORE await synchronously
       const syncStatements = statements.slice(0, awaitIndex);
       executeStatements(syncStatements);
 
-      // Execute the await expression statement
       const awaitStmt = statements[awaitIndex];
       const awaitLine = awaitStmt.loc ? awaitStmt.loc.start.line : callerLine;
       const awaitExpr = awaitStmt.expression.argument;
@@ -809,10 +894,9 @@ function runSimulation(ast, originalCode) {
 
       evaluateExpression(awaitExpr, awaitLine);
 
-      // Remaining statements after await queued as Microtask!
       const continuationStatements = statements.slice(awaitIndex + 1);
 
-      microtaskQueue.push({
+      pushMicrotask({
         id: `micro-async-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         label: `${funcName}() continuation (after await)`,
         type: 'await continuation',
@@ -841,7 +925,6 @@ function runSimulation(ast, originalCode) {
       if (node.body.type === 'BlockStatement') {
         executeStatements(node.body.body);
       } else {
-        // expression body e.g. () => console.log('hi')
         evaluateExpression(node.body);
       }
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, RotateCcw, Gauge, Zap } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, RotateCcw, Gauge } from 'lucide-react';
 
 export function ControlPanel({
   isPlaying,
@@ -17,11 +17,12 @@ export function ControlPanel({
   const isLastStep = currentStepIndex === totalSteps - 1;
 
   const speeds = [
-    { label: '0.25x', value: 2000 },
-    { label: '0.5x', value: 1200 },
-    { label: '1x', value: 750 },
-    { label: '2x', value: 400 },
-    { label: '4x', value: 150 }
+    { label: '0.1x (Very Slow)', value: 5000 },
+    { label: '0.25x (Slow)', value: 3000 },
+    { label: '0.5x', value: 1800 },
+    { label: '1x', value: 1000 },
+    { label: '2x', value: 500 },
+    { label: '4x', value: 200 }
   ];
 
   return (
