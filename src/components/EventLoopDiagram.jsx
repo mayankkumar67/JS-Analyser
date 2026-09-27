@@ -1,5 +1,16 @@
 import React from 'react';
-import { Layers, Globe, Zap, Clock, Activity, ArrowRight, ArrowUpLeft, ArrowUpRight, ArrowDownLeft, ArrowDownRight, Compass } from 'lucide-react';
+import {
+  Layers,
+  Globe,
+  Zap,
+  Clock,
+  Activity,
+  ArrowRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpLeft,
+  Compass
+} from 'lucide-react';
 
 export function EventLoopDiagram({ currentStep }) {
   if (!currentStep) return null;
@@ -7,13 +18,19 @@ export function EventLoopDiagram({ currentStep }) {
   const { eventLoopState, callStack, webApis, microtaskQueue, macrotaskQueue, type } = currentStep;
   const { phase, activePointer, activePhaseDescription } = eventLoopState;
 
-  // Determine active component states
+  // Determine active states for highlighting boxes & connectors
   const isStackActive = activePointer === 'stack' || callStack.length > 0;
   const isWebApiActive = activePointer === 'webapi' || webApis.length > 0;
   const isMicroActive = activePointer === 'microtask' || phase === 'DRAINING_MICROTASKS';
   const isMacroActive = activePointer === 'macrotask' || phase === 'POPPING_MACROTASK';
 
-  // Calculate physical rotation angle of the Event Loop Compass Pointer
+  // Active Flow Connectors
+  const flowStackToWeb = activePointer === 'webapi';
+  const flowWebToMacro = type === 'webapi';
+  const flowMicroToStack = activePointer === 'microtask' || phase === 'DRAINING_MICROTASKS';
+  const flowMacroToEventLoop = activePointer === 'macrotask' || phase === 'POPPING_MACROTASK';
+
+  // Physical compass rotation angle pointing from central wheel to 4 corners
   // Top-Left (Call Stack): -135deg
   // Top-Right (Web APIs): 45deg
   // Bottom-Left (Microtask Queue): -45deg
@@ -34,17 +51,15 @@ export function EventLoopDiagram({ currentStep }) {
     pointerAngle = -45;
     targetLabel = 'Microtask Queue';
     targetColor = 'text-purple-400';
-  } else if (activePointer === 'macrotask' || phase === 'POPPING_MACROTASK' || phase === 'CHECKING_MACRO_QUEUE') {
+  } else if (
+    activePointer === 'macrotask' ||
+    phase === 'POPPING_MACROTASK' ||
+    phase === 'CHECKING_MACRO_QUEUE'
+  ) {
     pointerAngle = 135;
     targetLabel = 'Macrotask Queue';
     targetColor = 'text-amber-400';
   }
-
-  // Active Flow Connectors
-  const flowStackToWeb = activePointer === 'webapi';
-  const flowWebToMacro = type === 'webapi';
-  const flowMicroToStack = activePointer === 'microtask' || phase === 'DRAINING_MICROTASKS';
-  const flowMacroToStack = activePointer === 'macrotask' || phase === 'POPPING_MACROTASK';
 
   return (
     <div className="event-loop-card">
@@ -53,14 +68,17 @@ export function EventLoopDiagram({ currentStep }) {
           <Activity className="header-icon text-cyan-400" />
           <span>JS Event Loop Architecture Map</span>
         </div>
-        
+
         <div className="pointer-status-pill">
           <Compass className="animate-spin-slow text-amber-400" size={16} />
-          <span>Pointer Target: <strong className={targetColor}>{targetLabel}</strong></span>
+          <span>
+            Pointer Target: <strong className={targetColor}>{targetLabel}</strong>
+          </span>
         </div>
       </div>
 
-      <div className="diagram-grid">
+      <div className="diagram-grid-central">
+        {/* ROW 1 */}
         {/* Row 1, Col 1: Call Stack Box */}
         <div className={`diagram-box box-stack ${isStackActive ? 'glow-cyan active-target' : ''}`}>
           <div className="box-title text-cyan-400">
@@ -74,18 +92,16 @@ export function EventLoopDiagram({ currentStep }) {
             {callStack.length === 0 ? (
               <span className="empty-hint">Stack is Empty</span>
             ) : (
-              <div className="preview-top-frame">
-                ▶ {callStack[callStack.length - 1].name}
-              </div>
+              <div className="preview-top-frame">▶ {callStack[callStack.length - 1].name}</div>
             )}
           </div>
           {isStackActive && <div className="active-pointer-indicator bg-cyan-500">ACTIVE</div>}
         </div>
 
-        {/* Row 1, Col 2: Flow Arrow Stack -> Web APIs */}
+        {/* Row 1, Col 2: Top Connector Call Stack -> Web APIs */}
         <div className="flow-connector connector-top">
           <span className="connector-label">Web API Call</span>
-          <ArrowRight className={`connector-arrow ${flowStackToWeb ? 'active-flow' : ''}`} />
+          <ArrowRight className={`connector-arrow ${flowStackToWeb ? 'active-flow-cyan' : ''}`} />
         </div>
 
         {/* Row 1, Col 3: Web APIs Box */}
@@ -101,15 +117,47 @@ export function EventLoopDiagram({ currentStep }) {
             {webApis.length === 0 ? (
               <span className="empty-hint">No active timers</span>
             ) : (
-              <div className="preview-item text-emerald-300">
-                ⏳ {webApis[0].label}
-              </div>
+              <div className="preview-item text-emerald-300">⏳ {webApis[0].label}</div>
             )}
           </div>
-          {activePointer === 'webapi' && <div className="active-pointer-indicator bg-emerald-500">REGISTERING TIMER</div>}
+          {activePointer === 'webapi' && (
+            <div className="active-pointer-indicator bg-emerald-500">REGISTERING TIMER</div>
+          )}
         </div>
 
-        {/* Row 2, Col 1: Microtask Queue Box */}
+        {/* ROW 2 */}
+        {/* Row 2, Col 1: Flow Connector Microtask Queue -> Call Stack */}
+        <div className="flow-connector connector-left">
+          <ArrowUp className={`connector-arrow ${flowMicroToStack ? 'active-flow-purple' : ''}`} />
+          <span className="connector-label-vertical">Drain Microtask</span>
+        </div>
+
+        {/* Row 2, Col 2: DEAD CENTER EVENT LOOP WHEEL */}
+        <div className="event-loop-wheel-container central-wheel">
+          <div
+            className={`event-loop-wheel ${
+              phase !== 'IDLE' && phase !== 'FINISHED' ? 'spinning-active' : ''
+            }`}
+            style={{ transform: `rotate(${pointerAngle}deg)` }}
+          >
+            {/* Top Pointer Laser Needle */}
+            <div className="wheel-pointer-needle"></div>
+            <div className="wheel-inner">
+              <Zap size={24} className="text-amber-400" />
+            </div>
+          </div>
+          <div className="wheel-label">EVENT LOOP</div>
+          <span className="wheel-sublabel">{activePhaseDescription || phase}</span>
+        </div>
+
+        {/* Row 2, Col 3: Flow Connector Web APIs -> Macrotask Queue */}
+        <div className="flow-connector connector-right">
+          <ArrowDown className={`connector-arrow ${flowWebToMacro ? 'active-flow-emerald' : ''}`} />
+          <span className="connector-label-vertical">Timer Ready</span>
+        </div>
+
+        {/* ROW 3 */}
+        {/* Row 3, Col 1: Microtask Queue Box */}
         <div className={`diagram-box box-microtask ${isMicroActive ? 'glow-purple active-target' : ''}`}>
           <div className="box-title text-purple-400">
             <div className="title-left">
@@ -123,31 +171,21 @@ export function EventLoopDiagram({ currentStep }) {
             {microtaskQueue.length === 0 ? (
               <span className="empty-hint">Empty Queue</span>
             ) : (
-              <div className="preview-item text-purple-300">
-                ⚡ {microtaskQueue[0].label}
-              </div>
+              <div className="preview-item text-purple-300">⚡ {microtaskQueue[0].label}</div>
             )}
           </div>
-          {isMicroActive && <div className="active-pointer-indicator bg-purple-500">DRAINING MICROTASKS</div>}
+          {isMicroActive && (
+            <div className="active-pointer-indicator bg-purple-500">DRAINING MICROTASKS</div>
+          )}
         </div>
 
-        {/* Row 2, Col 2: Central Event Loop Wheel & Dynamic Pointer */}
-        <div className="event-loop-wheel-container">
-          <div
-            className={`event-loop-wheel ${phase !== 'IDLE' && phase !== 'FINISHED' ? 'spinning-active' : ''}`}
-            style={{ transform: `rotate(${pointerAngle}deg)` }}
-          >
-            {/* Top Pointer Laser Needle */}
-            <div className="wheel-pointer-needle"></div>
-            <div className="wheel-inner">
-              <Zap size={22} className="text-amber-400" />
-            </div>
-          </div>
-          <div className="wheel-label">EVENT LOOP</div>
-          <span className="wheel-sublabel">{activePhaseDescription || phase}</span>
+        {/* Row 3, Col 2: Bottom Connector Macrotask -> Event Loop */}
+        <div className="flow-connector connector-bottom">
+          <ArrowUp className={`connector-arrow ${flowMacroToEventLoop ? 'active-flow-amber' : ''}`} />
+          <span className="connector-label">Pop Macrotask</span>
         </div>
 
-        {/* Row 2, Col 3: Macrotask Queue Box */}
+        {/* Row 3, Col 3: Macrotask Queue Box */}
         <div className={`diagram-box box-macrotask ${isMacroActive ? 'glow-amber active-target' : ''}`}>
           <div className="box-title text-amber-400">
             <div className="title-left">
@@ -161,12 +199,12 @@ export function EventLoopDiagram({ currentStep }) {
             {macrotaskQueue.length === 0 ? (
               <span className="empty-hint">Empty Queue</span>
             ) : (
-              <div className="preview-item text-amber-300">
-                ⏰ {macrotaskQueue[0].label}
-              </div>
+              <div className="preview-item text-amber-300">⏰ {macrotaskQueue[0].label}</div>
             )}
           </div>
-          {isMacroActive && <div className="active-pointer-indicator bg-amber-500">POPPING MACROTASK</div>}
+          {isMacroActive && (
+            <div className="active-pointer-indicator bg-amber-500">POPPING MACROTASK</div>
+          )}
         </div>
       </div>
     </div>
